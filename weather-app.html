@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M Kumarasamy College of Engineering - Weather App</title>
+    <style>
+        /* =============================
+           Design Tokens / CSS Variables
+           ============================= */
+        :root {
+            --font-sans: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', Arial, sans-serif;
+            --radius-xs: 4px;
+            --radius-sm: 8px;
+            --radius-md: 14px;
+            --radius-lg: 22px;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.08);
+            --shadow-md: 0 4px 14px rgba(0,0,0,.10);
+            --shadow-lg: 0 12px 28px -6px rgba(0,0,0,.18);
+            --grad-clear: linear-gradient(135deg,#52a0ff,#377dff 55%,#1d57ff);
+            --grad-clouds: linear-gradient(135deg,#9eaebb,#7d8a95 55%,#58636b);
+            --grad-rain: linear-gradient(135deg,#4b5964,#374047 55%,#21272c);
+            --grad-snow: linear-gradient(135deg,#e9eef7,#d6e2f5 55%,#c2d4f3);
+            --grad-thunder: linear-gradient(135deg,#2f3944,#232b33 55%,#1a2127);
+            --grad-mist: linear-gradient(135deg,#d0d6dd,#bec5cc 55%,#aeb5bb);
+            --grad-haze: linear-gradient(135deg,#f2b45d,#e7993e 55%,#d67812);
+            --c-bg: #0f141a;
+            --c-bg-alt: #121a22;
+            --c-text: #151c24;
+            --c-text-light: #5a6570;
+            --c-border: #e3e8ef;
+            --c-border-alt: #d1d9e2;
+            --c-error: #d7263d;
+            --c-success: #0a7d42;
+            --c-accent: #246bff;
+            --transition-fast: 160ms cubic-bezier(.4,0,.2,1);
+        }
+
+        /* Global Reset */
+        *,*::before,*::after { box-sizing: border-box; }
+        html { -webkit-font-smoothing: antialiased; }
+        body {
+            margin: 0;
+            font-family: var(--font-sans);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: clamp(1rem, 2vw, 2.5rem);
+            background: var(--grad-clear);
+            transition: background 600ms ease;
+        }
+
+        body.clouds { background: var(--grad-clouds); }
+        body.rain, body.drizzle { background: var(--grad-rain); }
+        body.snow { background: var(--grad-snow); }
+        body.thunderstorm { background: var(--grad-thunder); }
+        body.mist, body.smoke, body.fog, body.ash { background: var(--grad-mist); }
+        body.haze, body.dust, body.sand { background: var(--grad-haze); }
+
+        /* Subtle animated noise overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(45deg,rgba(255,255,255,.04)0 2px,transparent 2px 6px);
+            mix-blend-mode: overlay;
+            animation: drift 14s linear infinite;
+        }
+        @keyframes drift { from { transform: translate3d(0,0,0);} to { transform: translate3d(60px,40px,0);} }
+
+        /* Layout */
+        .container { width: min(430px, 100%); }
+
+        .header { text-align: center; margin-bottom: 1.75rem; color: #fff; }
+        .header h1 { font-size: clamp(1.45rem, 3.6vw, 1.9rem); font-weight:600; letter-spacing:.5px; margin:0 0 .35rem; }
+        .college-name { font-size: .9rem; opacity:.85; font-weight:500; letter-spacing:.5px; }
+
+        /* Card */
+        .weather-card {
+            position: relative;
+            background: rgba(255,255,255,.84);
+            backdrop-filter: blur(22px) saturate(140%);
+            -webkit-backdrop-filter: blur(22px) saturate(140%);
+            border: 1px solid rgba(255,255,255,.4);
+            box-shadow: var(--shadow-lg);
+            border-radius: var(--radius-lg);
+            padding: 1.9rem 1.9rem 2.1rem;
+            color: var(--c-text);
+            overflow: hidden;
+            transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+        }
+        .weather-card::before { /* accent gradient bar */
+            content: '';
+            position: absolute; inset: 0;
+            background: linear-gradient(120deg,rgba(255,255,255,.3),rgba(255,255,255,0));
+            mix-blend-mode: overlay;
+            pointer-events: none;
+        }
+        .weather-card::after { /* top accent line */
+            content:''; position:absolute; top:0; left:0; right:0; height:4px; background: linear-gradient(90deg,#fff,rgba(255,255,255,0)); opacity:.55;
+        }
+        .weather-card:hover { box-shadow: 0 16px 38px -10px rgba(0,0,0,.28); transform: translateY(-4px); }
+
+        /* Skeleton Loading */
+        .skeleton-wrapper { display:grid; gap:1.1rem; }
+        .skeleton { position:relative; overflow:hidden; background: linear-gradient(90deg,#dfe5ec,#f1f5f9); height:16px; border-radius:6px; }
+        .skeleton.big { height:54px; border-radius:14px; }
+        .skeleton.inline { height:40px; width:40px; border-radius:12px; }
+        .skeleton::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent); animation: shimmer 1.5s infinite; }
+        @keyframes shimmer { 0%{ transform:translateX(-100%);} 100%{ transform:translateX(100%);} }
+
+        /* Error */
+        .error { background: #fff; border:1px solid #ffd6d6; color:#b50014; padding:1.2rem 1rem 1.4rem; border-radius: var(--radius-md); font-size:.95rem; line-height:1.35; box-shadow:0 8px 18px -6px rgba(213,0,0,.25); }
+        .error h3 { margin:0 0 .4rem; font-size:1.05rem; font-weight:600; }
+
+        /* Icon */
+        .icon-wrapper { width:96px; height:96px; margin:0 auto 1.1rem; display:grid; place-items:center; border-radius:28px; position:relative; background:linear-gradient(145deg,#ffffff,#e6eef7); box-shadow: inset 0 2px 6px rgba(255,255,255,.7), 0 6px 14px -4px rgba(0,0,0,.18); }
+        .icon-wrapper svg { width:62px; height:62px; stroke-linecap:round; stroke-linejoin:round; }
+        .icon-label { position:absolute; bottom:-6px; left:50%; transform:translateX(-50%); font-size:.65rem; letter-spacing:1px; background:#1e293b; color:#fff; padding:2px 8px 3px; border-radius:100px; font-weight:500; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+
+        /* Headings / Primary info */
+        .city-name { font-size: clamp(1.25rem, 3.4vw, 1.55rem); font-weight:600; margin:0 0 .35rem; letter-spacing:.4px; }
+        .temperature { font-size: clamp(3.1rem, 8vw, 3.8rem); font-weight:300; line-height:1; margin:.15rem 0 .55rem; letter-spacing:-1px; }
+        .temperature small { font-size: .9rem; font-weight:500; letter-spacing:0; margin-left:.35rem; color: var(--c-text-light); }
+        .description { font-size: .95rem; font-weight:500; text-transform:capitalize; letter-spacing:.75px; color: var(--c-text-light); margin: 0 0 1.55rem; }
+
+        /* Details Grid */
+        .weather-details { display:grid; grid-template-columns: repeat(auto-fit, minmax(125px,1fr)); gap: .9rem; margin:0 0 1.6rem; }
+        .detail-item { position:relative; background:#ffffff; border:1px solid var(--c-border-alt); border-radius: var(--radius-md); padding:.85rem .9rem 1rem; display:flex; flex-direction:column; gap:.35rem; min-height:92px; overflow:hidden; }
+        .detail-item::before { content:''; position:absolute; inset:0; background:linear-gradient(160deg,rgba(255,255,255,0),rgba(0,0,0,.04)); opacity:.55; pointer-events:none; }
+        .detail-label { font-size:.65rem; letter-spacing:1.3px; font-weight:600; text-transform:uppercase; color: var(--c-text-light); }
+        .detail-value { font-size:1.25rem; font-weight:600; letter-spacing:.5px; color: var(--c-text); display:flex; align-items:baseline; gap:.25rem; }
+        .detail-unit { font-size:.65rem; font-weight:600; text-transform:uppercase; letter-spacing:1px; color: var(--c-text-light); }
+
+        /* Footer / Meta */
+        .meta { display:flex; justify-content:space-between; align-items:center; gap:.75rem; flex-wrap:wrap; font-size:.65rem; letter-spacing:.75px; color: var(--c-text-light); margin-top:.35rem; }
+        .updated { font-weight:600; color: var(--c-text-light); }
+        .status-dot { width:8px; height:8px; border-radius:50%; background: var(--c-success); box-shadow:0 0 0 4px rgba(10,125,66,.18); display:inline-block; margin-right:6px; position:relative; top:-1px; }
+        .status-offline { background:#d7263d; box-shadow:0 0 0 4px rgba(215,38,61,.2); }
+
+        /* Refresh Button */
+        .actions { display:flex; justify-content:center; }
+        .refresh-btn { --btn-bg: #1e293b; --btn-fg:#fff; --btn-bg-hover:#334155; --btn-bg-active:#0f172a; position:relative; display:inline-flex; align-items:center; gap:.55rem; background: var(--btn-bg); color: var(--btn-fg); border:1px solid #1e293b; padding:.85rem 1.25rem .9rem; font-size:.85rem; letter-spacing:.75px; font-weight:600; text-transform:uppercase; border-radius: 14px; cursor:pointer; outline:none; transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast); box-shadow: 0 4px 10px -3px rgba(0,0,0,.35), 0 2px 6px -2px rgba(0,0,0,.35); }
+        .refresh-btn svg { width:18px; height:18px; }
+        .refresh-btn:hover { background: var(--btn-bg-hover); }
+        .refresh-btn:active { background: var(--btn-bg-active); transform: translateY(1px); box-shadow:0 2px 6px -2px rgba(0,0,0,.45); }
+        .refresh-btn:disabled { opacity:.6; cursor:not-allowed; filter:grayscale(.4); }
+        .refresh-btn.loading svg { animation: spin 1.1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg);} }
+
+        /* Animations */
+        .fade-in { animation: fadeIn .55s ease both; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(14px);} to { opacity:1; transform:translateY(0);} }
+
+        /* Responsive Tweaks */
+        @media (max-width: 520px) {
+            .weather-card { padding: 1.55rem 1.35rem 1.7rem; }
+            .icon-wrapper { width:86px; height:86px; }
+            .icon-wrapper svg { width:54px; height:54px; }
+            .detail-item { min-height:88px; }
+        }
+        @media (max-width: 380px) {
+            .weather-details { grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); }
+            .header h1 { letter-spacing:.25px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Weather Dashboard</h1>
+            <div class="college-name">M Kumarasamy College of Engineering</div>
+        </div>
+
+        <!-- Weather Card -->
+        <div class="weather-card" id="weatherCard" aria-live="polite" aria-busy="true">
+            <div class="skeleton-wrapper" id="loadingSkeleton">
+                <div class="skeleton inline"></div>
+                <div class="skeleton big"></div>
+                <div class="skeleton" style="width:60%"></div>
+                <div class="skeleton" style="width:40%"></div>
+                <div class="skeleton" style="width:100%; height:70px; border-radius:12px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Weather App Class for better organization
+        class WeatherApp {
+            constructor() {
+                // API Configuration
+                this.API_KEY = '613e7752661bded6c20c632bf5b2c444'; // Your OpenWeatherMap API key
+                this.BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
+                
+                // M Kumarasamy College of Engineering coordinates
+                this.DEFAULT_LAT = 10.9578;
+                this.DEFAULT_LON = 78.0806;
+                
+                // DOM Elements
+                this.weatherCard = document.getElementById('weatherCard');
+                this.loadingElement = document.getElementById('loading');
+                this.body = document.body;
+                
+                // Initialize the app
+                this.init();
+            }
+
+            // Initialize the weather app
+            init() {
+                this.fetchWeatherData();
+            }
+
+            // Fetch weather data from OpenWeatherMap API
+            async fetchWeatherData() {
+                try {
+                    this.showLoading();
+                    
+                    const url = `${this.BASE_URL}?lat=${this.DEFAULT_LAT}&lon=${this.DEFAULT_LON}&appid=${this.API_KEY}&units=metric`;
+                    
+                    const response = await fetch(url);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    this.displayWeatherData(data);
+                    this.updateBackgroundTheme(data.weather[0].main.toLowerCase());
+                    
+                } catch (error) {
+                    console.error('Error fetching weather data:', error);
+                    this.showError('Failed to fetch weather data. Please check your internet connection and API key.');
+                }
+            }
+
+            // Show loading state
+            showLoading() {
+                this.weatherCard.setAttribute('aria-busy','true');
+                this.weatherCard.innerHTML = `
+                    <div class="skeleton-wrapper">
+                        <div class="skeleton inline"></div>
+                        <div class="skeleton big"></div>
+                        <div class="skeleton" style="width:60%"></div>
+                        <div class="skeleton" style="width:40%"></div>
+                        <div class="skeleton" style="width:100%; height:70px; border-radius:12px;
+                        "></div>
+                    </div>`;
+            }
+
+            // Display error message
+            showError(message) {
+                this.weatherCard.setAttribute('aria-busy','false');
+                this.weatherCard.innerHTML = `
+                    <div class="error fade-in" role="alert">
+                        <h3>Request Failed</h3>
+                        <p>${message}</p>
+                        <div class="actions" style="margin-top: .65rem;">
+                            <button class="refresh-btn" onclick="weatherApp.refreshWeather()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15.48-6.36L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15.48 6.36L3 16"/></svg>
+                                Retry
+                            </button>
+                        </div>
+                    </div>`;
+            }
+
+            // Display weather data in the UI
+            displayWeatherData(data) {
+                const {
+                    name: city,
+                    main: { temp, humidity, pressure, feels_like },
+                    weather: [{ main: weatherMain, description }],
+                    wind: { speed }
+                } = data;
+
+                const iconSvg = this.buildWeatherSvg(weatherMain.toLowerCase());
+                const now = new Date();
+                const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                this.weatherCard.setAttribute('aria-busy','false');
+                this.weatherCard.innerHTML = `
+                    <div class="fade-in" role="group" aria-label="Current weather conditions">
+                        <div class="icon-wrapper" aria-hidden="true">${iconSvg}<span class="icon-label">${weatherMain}</span></div>
+                        <h2 class="city-name" aria-label="Location">${city}</h2>
+                        <div class="temperature" aria-label="Temperature">${Math.round(temp)}<small>°C</small></div>
+                        <p class="description" aria-label="Condition">${description}</p>
+                        <div class="weather-details" aria-label="Details">
+                            <div class="detail-item" role="group" aria-label="Humidity">
+                                <span class="detail-label">Humidity</span>
+                                <span class="detail-value">${humidity}<span class="detail-unit">%</span></span>
+                            </div>
+                            <div class="detail-item" role="group" aria-label="Wind speed">
+                                <span class="detail-label">Wind</span>
+                                <span class="detail-value">${speed}<span class="detail-unit">m/s</span></span>
+                            </div>
+                            <div class="detail-item" role="group" aria-label="Pressure">
+                                <span class="detail-label">Pressure</span>
+                                <span class="detail-value">${pressure}<span class="detail-unit">hPa</span></span>
+                            </div>
+                            <div class="detail-item" role="group" aria-label="Feels like">
+                                <span class="detail-label">Feels Like</span>
+                                <span class="detail-value">${Math.round(feels_like)}<span class="detail-unit">°C</span></span>
+                            </div>
+                        </div>
+                        <div class="actions">
+                            <button class="refresh-btn" onclick="weatherApp.refreshWeather()" aria-label="Refresh data">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15.48-6.36L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15.48 6.36L3 16"/></svg>
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="meta" aria-label="Metadata">
+                            <span class="updated"><span class="status-dot"></span>Updated ${timeString}</span>
+                            <span>OpenWeatherMap</span>
+                        </div>
+                    </div>`;
+            }
+
+            // Get appropriate weather icon based on condition
+            buildWeatherSvg(condition){
+                const base = (p)=>`<svg viewBox='0 0 64 64' stroke='currentColor' stroke-width='2.5' fill='none'>${p}</svg>`;
+                const sun = base(`<circle cx='32' cy='32' r='12' fill='url(#g)' stroke='rgba(0,0,0,.15)'/><g stroke-linecap='round'><path d='M32 8v6'/><path d='M32 50v6'/><path d='M8 32h6'/><path d='M50 32h6'/><path d='M14.9 14.9l4.3 4.3'/><path d='M44.8 44.8l4.3 4.3'/><path d='M49.1 14.9l-4.3 4.3'/><path d='M19.2 44.8l-4.3 4.3'/></g><defs><radialGradient id='g'><stop offset='0%' stop-color='#fff59d'/><stop offset='100%' stop-color='#fdd835'/></radialGradient></defs>`);
+                const clouds = base(`<g stroke-linecap='round' stroke-linejoin='round'><path d='M20 44h24a10 10 0 0 0 0-20c-.6 0-1.2 0-1.8.1A14 14 0 0 0 18 30c0 .7.1 1.3.2 2A8 8 0 0 0 20 44Z' fill='url(#c1)' stroke='rgba(0,0,0,.18)'/></g><defs><linearGradient id='c1' x1='16' x2='48' y1='24' y2='44' gradientUnits='userSpaceOnUse'><stop stop-color='#fff'/><stop offset='1' stop-color='#d7e0e7'/></linearGradient></defs>`);
+                const rain = base(`<g stroke-linecap='round' stroke-linejoin='round'><path d='M20 42h24a10 10 0 0 0 0-20c-.6 0-1.2 0-1.8.1A14 14 0 0 0 18 28c0 .7.1 1.3.2 2A8 8 0 0 0 20 42Z' fill='url(#rc)' stroke='rgba(0,0,0,.2)'/><path d='M24 50l2-6M32 50l2-6M40 50l2-6' stroke='#1976d2'/></g><defs><linearGradient id='rc' x1='16' x2='48' y1='22' y2='42'><stop stop-color='#fff'/><stop offset='1' stop-color='#cfd8dc'/></linearGradient></defs>`);
+                const snow = base(`<g stroke-linecap='round' stroke-linejoin='round'><path d='M20 42h24a10 10 0 0 0 0-20c-.6 0-1.2 0-1.8.1A14 14 0 0 0 18 28c0 .7.1 1.3.2 2A8 8 0 0 0 20 42Z' fill='url(#sc)' stroke='rgba(0,0,0,.18)'/><g stroke='#1976d2'><path d='M24 48l2-2 2 2-2 2-2-2Z'/><path d='M32 48l2-2 2 2-2 2-2-2Z'/><path d='M40 48l2-2 2 2-2 2-2-2Z'/></g></g><defs><linearGradient id='sc' x1='16' x2='48' y1='22' y2='42'><stop stop-color='#fff'/><stop offset='1' stop-color='#e3edf5'/></linearGradient></defs>`);
+                const thunder = base(`<g stroke-linecap='round' stroke-linejoin='round'><path d='M20 40h24a10 10 0 0 0 0-20c-.6 0-1.2 0-1.8.1A14 14 0 0 0 18 26c0 .7.1 1.3.2 2A8 8 0 0 0 20 40Z' fill='url(#tc)' stroke='rgba(0,0,0,.2)'/><path d='M30 44h6l-4 12 0-8h-6l4-12Z' fill='#ffca28' stroke='rgba(0,0,0,.25)'/></g><defs><linearGradient id='tc' x1='16' x2='48' y1='20' y2='40'><stop stop-color='#fff'/><stop offset='1' stop-color='#c5ced4'/></linearGradient></defs>`);
+                const mist = base(`<g stroke-linecap='round' stroke-linejoin='round'><path d='M16 30h32M16 36h32M16 42h32' stroke='#90a4ae'/><path d='M20 26h24a10 10 0 0 0 0-20c-.6 0-1.2 0-1.8.1A14 14 0 0 0 18 12c0 .7.1 1.3.2 2A8 8 0 0 0 20 26Z' fill='url(#mc)' stroke='rgba(0,0,0,.16)'/></g><defs><linearGradient id='mc' x1='16' x2='48' y1='6' y2='26'><stop stop-color='#fff'/><stop offset='1' stop-color='#d0d7dc'/></linearGradient></defs>`);
+                const map = { clear:sun, sunny:sun, clouds:clouds, cloud:clouds, rain:rain, drizzle:rain, snow:snow, thunderstorm:thunder, storm:thunder, mist:mist, fog:mist, haze:mist, smoke:mist, dust:mist, sand:mist, ash:mist };
+                return map[condition] || sun;
+            }
+
+            // Update background theme based on weather condition
+            updateBackgroundTheme(weatherCondition) {
+                const classes = ['clear','clouds','rain','drizzle','thunderstorm','snow','mist','smoke','haze','dust','fog','sand','ash'];
+                this.body.classList.remove(...classes);
+                const mapping = { drizzle:'rain', fog:'mist', smoke:'mist', dust:'haze', sand:'haze', ash:'mist', squall:'clouds', tornado:'thunderstorm' };
+                const mapped = mapping[weatherCondition] || weatherCondition || 'clear';
+                this.body.classList.add(mapped);
+            }
+
+            // Refresh weather data
+            async refreshWeather() {
+                const btn = document.querySelector('.refresh-btn');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.classList.add('loading');
+                    const label = btn.querySelector('span.btn-text');
+                }
+                await this.fetchWeatherData();
+                requestAnimationFrame(()=>{
+                    const newBtn = document.querySelector('.refresh-btn');
+                    if(newBtn){
+                        newBtn.disabled = false;
+                        newBtn.classList.remove('loading');
+                    }
+                });
+            }
+        }
+
+        // Initialize the weather app when the page loads
+        let weatherApp;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            weatherApp = new WeatherApp();
+        });
+
+        // Handle API key setup (for demo purposes)
+        // Demo mode removed for production readiness since API key is configured.
+    </script>
+</body>
+</html>
